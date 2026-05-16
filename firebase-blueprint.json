@@ -1,0 +1,129 @@
+{
+  "entities": {
+    "Skill": {
+      "title": "Skill",
+      "description": "A specific skill or service with a category",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "description": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "icon": { "type": "string" }
+      },
+      "required": ["name", "category"]
+    },
+    "User": {
+      "title": "User Profile",
+      "description": "Details about a professional on the barter platform",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "photoURL": { "type": "string" },
+        "username": { "type": "string" },
+        "skillsOffered": { "type": "array", "items": { "$ref": "Skill" } },
+        "skillsWanted": { "type": "array", "items": { "$ref": "Skill" } },
+        "bio": { "type": "string" },
+        "portfolioUrl": { "type": "string", "format": "uri" },
+        "testimonials": { 
+          "type": "array", 
+          "items": { 
+            "type": "object",
+            "properties": {
+              "author": { "type": "string" },
+              "text": { "type": "string" },
+              "rating": { "type": "number" }
+            }
+          }
+        },
+        "subscriptionPlan": { "type": "string", "enum": ["free", "pro"] },
+        "country": { "type": "string" },
+        "autoTranslate": { "type": "boolean" },
+        "subscriptionExpiresAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["displayName", "email", "skillsOffered", "skillsWanted", "subscriptionPlan"]
+    },
+    "Trade": {
+      "title": "Skill Barter Trade",
+      "description": "A negotiation or completed swap between two users",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "skillOffered": { "type": "string" },
+        "skillWanted": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "declined", "completed"] },
+        "senderReview": {
+          "type": "object",
+          "properties": {
+            "rating": { "type": "number" },
+            "comment": { "type": "string" },
+            "taggedSkill": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "receiverReview": {
+          "type": "object",
+          "properties": {
+            "rating": { "type": "number" },
+            "comment": { "type": "string" },
+            "taggedSkill": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["senderId", "receiverId", "skillOffered", "skillWanted", "status", "createdAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Alert for a user regarding trades or system messages",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "type": { "type": "string", "enum": ["trade_request", "trade_update"] },
+        "message": { "type": "string" },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "relatedTradeId": { "type": "string" }
+      },
+      "required": ["userId", "type", "message", "read", "createdAt"]
+    },
+    "CommunityPost": {
+      "title": "Community Post",
+      "description": "A status update or post shared by a user for the community",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "username": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "content": { "type": "string" },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Public user profiles with skill data"
+    },
+    "/posts/{postId}": {
+      "schema": "CommunityPost",
+      "description": "Public posts for the community feed"
+    },
+    "/trades/{tradeId}": {
+      "schema": "Trade",
+      "description": "Trade agreements between users"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User-specific notifications"
+    }
+  }
+}

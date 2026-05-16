@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans Arabic", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "IBM Plex Sans Arabic", serif;
+}
+
+:root {
+  --background: #fcfcf9;
+  --foreground: #1c1c1a;
+  --primary: #2563eb;
+  --secondary: #64748b;
+  --accent: #f59e0b;
+}
+
+body {
+  @apply bg-[#fcfcf9] text-[#1c1c1a] font-sans antialiased;
+  min-height: 100vh;
+}
+
+.rtl-flip {
+  @apply rtl:scale-x-100 ltr:scale-x-100;
+}
