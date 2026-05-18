@@ -25,6 +25,7 @@
         "skillsOffered": { "type": "array", "items": { "$ref": "Skill" } },
         "skillsWanted": { "type": "array", "items": { "$ref": "Skill" } },
         "bio": { "type": "string" },
+        "balance": { "type": "number" },
         "portfolioUrl": { "type": "string", "format": "uri" },
         "testimonials": { 
           "type": "array", 
@@ -44,6 +45,20 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["displayName", "email", "skillsOffered", "skillsWanted", "subscriptionPlan"]
+    },
+    "Transaction": {
+      "title": "Wallet Transaction",
+      "description": "Record of a balance top-up or spend",
+      "type": "object",
+      "properties": {
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["credit", "debit"] },
+        "method": { "type": "string", "enum": ["card", "paypal", "gift_card"] },
+        "status": { "type": "string", "enum": ["completed", "failed"] },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["amount", "type", "status", "createdAt"]
     },
     "Trade": {
       "title": "Skill Barter Trade",
@@ -124,6 +139,10 @@
     "/users/{userId}/notifications/{notificationId}": {
       "schema": "Notification",
       "description": "User-specific notifications"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "User wallet history"
     }
   }
 }

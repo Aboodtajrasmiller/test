@@ -1,61 +1,47 @@
 import { motion } from 'motion/react';
-import { Search, Filter, ArrowLeftRight, Users, Sparkles, Wand2, MessageSquare, Star, Languages, MapPin, Clock, CheckCircle } from 'lucide-react';
+import { Search, Filter, ArrowLeftRight, Users, MessageSquare, Star, MapPin, Clock, CheckCircle, X, Globe as GlobeIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, where, limit } from 'firebase/firestore';
+import { collection, getDocs, query, limit } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/error-handler';
 import { useAuth } from '../context/AuthContext';
 import { cn } from '../lib/utils';
-import { findSkillMatches, MatchResult, translateText } from '../services/geminiService';
-import { MatchAnalysisModal } from '../components/MatchAnalysisModal';
 import { toast } from 'react-hot-toast';
 import { createTradeRequest } from '../services/tradeService';
+import { useTranslation } from 'react-i18next';
+import { TranslatableContent } from '../components/TranslatableContent';
+import { SKILL_ICONS_MAP } from '../constants';
 
-import { Skill, SKILL_ICONS_MAP } from '../constants';
+import { Skill } from '../constants';
 
 export function Marketplace() {
   const { user, profile } = useAuth();
+  const { t, i18n } = useTranslation();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [submitting, setSubmitting] = useState<string | null>(null);
-  
-  // Translation state
-  const [translations, setTranslations] = useState<Record<string, string>>({});
-  const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set());
 
-  const handleTranslate = async (id: string, text: string) => {
-    if (translations[id]) return; // Already translated
-    
-    setTranslatingIds(prev => new Set(prev).add(id));
-    try {
-      const isArabicSpeaker = profile?.country?.includes("مصر") || profile?.country?.includes("السعودية") || profile?.country?.includes("الإمارات") || profile?.country?.includes("الأردن");
-      const targetLang = isArabicSpeaker ? "Arabic" : "English";
-      const translated = await translateText(text, targetLang);
-      setTranslations(prev => ({ ...prev, [id]: translated }));
-    } catch (error) {
-      toast.error("فشلت الترجمة");
-    } finally {
-      setTranslatingIds(prev => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
-  };
-  
+  // Debounce search term
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   // Filter states
   const [showFilters, setShowFilters] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState("الكل");
+  const [selectedCategory, setSelectedCategory] = useState(t('common.all'));
   const [planFilter, setPlanFilter] = useState<'all' | 'free' | 'pro'>('all');
   const [ratingFilter, setRatingFilter] = useState(0);
   const [countryFilter, setCountryFilter] = useState<string[]>([]);
-  
-  // AI Modal states
-  const [modalOpen, setModalOpen] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState<MatchResult | null>(null);
-  const [targetName, setTargetName] = useState("");
+
+  useEffect(() => {
+    setSelectedCategory(t('common.all'));
+  }, [i18n.language]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -84,35 +70,18 @@ export function Marketplace() {
     fetchUsers();
   }, [user]);
 
-  const handleAnalyze = async (targetUser: any) => {
-    if (!profile) {
-      toast.error("يرجى إكمال ملفك الشخصي أولاً");
-      return;
-    }
-
-    setTargetName(targetUser.displayName);
-    setModalOpen(true);
-    setAiLoading(true);
-
-    const result = await findSkillMatches(
-      { skillsOffered: profile.skillsOffered || [], skillsWanted: profile.skillsWanted || [] },
-      { skillsOffered: targetUser.skillsOffered || [], skillsWanted: targetUser.skillsWanted || [] }
-    );
-
-    setAnalysisResult(result);
-    setAiLoading(false);
-    
-    if (!result) {
-      toast.error("فشل التحليل الذكي");
-      setModalOpen(false);
-    }
-  };
-
   const handleTradeRequest = async (targetUser: any, specificSkill?: string) => {
     if (!user || !profile) {
-      toast.error("يرجى تسجيل الدخول وإكمال ملفك الشخصي أولاً");
+      toast.error(i18n.language === 'ar' ? "يرجى تسجيل الدخول وإكمال ملفك الشخصي أولاً" : "Please log in and complete your profile first");
       return;
     }
+
+    const confirmed = window.confirm(
+      i18n.language === 'ar' 
+        ? `هل أنت متأكد من رغبتك في إرسال طلب مقايضة إلى ${targetUser.displayName}؟`
+        : `Are you sure you want to send a trade request to ${targetUser.displayName}?`
+    );
+    if (!confirmed) return;
 
     setSubmitting(targetUser.id);
     try {
@@ -124,12 +93,20 @@ export function Marketplace() {
         specificSkill || targetUser.skillsOffered?.[0]?.name || "خدمات مهنية",
         profile.subscriptionPlan || 'free'
       );
-      toast.success(`تم إرسال طلب المقايضة إلى ${targetUser.displayName}`);
+      toast.success(
+        i18n.language === 'ar'
+          ? `تم إرسال طلب المقايضة إلى ${targetUser.displayName}`
+          : `Trade request sent to ${targetUser.displayName}`
+      );
     } catch (error: any) {
       if (error.message === "LIMIT_REACHED") {
-        toast.error("لقد وصلت للحد الأقصى للمقايضات (3) في الخطة المجانية. يرجى الترقية!");
+        toast.error(
+          i18n.language === 'ar'
+            ? "لقد وصلت للحد الأقصى للمقايضات (3) في الخطة المجانية. يرجى الترقية!"
+            : "You have reached the maximum trades limit (3) in the free plan. Please upgrade!"
+        );
       } else {
-        toast.error("فشل إرسال الطلب");
+        toast.error(t('common.error'));
       }
     } finally {
       setSubmitting(null);
@@ -137,10 +114,10 @@ export function Marketplace() {
   };
 
   const filteredUsers = users.filter(u => {
-    const matchesSearch = u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.skillsOffered?.some((s: Skill) => s.name?.toLowerCase().includes(searchTerm.toLowerCase()) || s.description?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = u.displayName?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      u.skillsOffered?.some((s: Skill) => s.name?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) || s.description?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()));
     
-    const matchesCategory = selectedCategory === "الكل" || 
+    const matchesCategory = selectedCategory === t('common.all') || 
       u.skillsOffered?.some((s: Skill) => s.category === selectedCategory);
     
     const matchesPlan = planFilter === 'all' || (u.subscriptionPlan || 'free') === planFilter;
@@ -156,7 +133,7 @@ export function Marketplace() {
   });
 
   const CATEGORIES = [
-    "الكل",
+    t('common.all'),
     "تطوير",
     "تصميم",
     "تسويق",
@@ -168,30 +145,38 @@ export function Marketplace() {
 
   return (
     <div className="space-y-8">
-      <MatchAnalysisModal 
-        isOpen={modalOpen} 
-        onClose={() => setModalOpen(false)}
-        loading={aiLoading}
-        result={analysisResult}
-        targetName={targetName}
-      />
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold mb-2">استكشاف المقايضات</h1>
-          <p className="text-slate-500">ابحث عن المهارات التي تحتاجها واعرض ما تتقنه.</p>
+          <h1 className="text-3xl font-bold mb-2">{t('marketplace.title')}</h1>
+          <p className="text-slate-500">{t('marketplace.subtitle')}</p>
         </div>
         
         <div className="flex gap-2">
           <div className="relative">
-            <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <Search className={cn("absolute top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none", i18n.language === 'ar' ? 'right-3' : 'left-3')} size={18} />
             <input 
               type="text" 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="ابحث عن مهارة..." 
-              className="pr-10 pl-4 py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64"
+              placeholder={t('marketplace.searchPlaceholder')} 
+              className={cn(
+                "py-2 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-64 transition-all",
+                i18n.language === 'ar' ? 'pr-10 pl-10' : 'pl-10 pr-10'
+              )}
             />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm("")}
+                className={cn(
+                  "absolute top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors",
+                  i18n.language === 'ar' ? 'left-2' : 'right-2'
+                )}
+                aria-label="Clear search"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
           <button 
             onClick={() => setShowFilters(!showFilters)}
@@ -201,7 +186,7 @@ export function Marketplace() {
             )}
           >
             <Filter size={18} />
-            <span>تصفية</span>
+            <span>{t('marketplace.filter')}</span>
           </button>
         </div>
       </div>
@@ -215,7 +200,7 @@ export function Marketplace() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {/* Category Filter */}
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">المصنف المهني</label>
+              <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{t('marketplace.categories')}</label>
               <div className="flex flex-wrap gap-2">
                 {CATEGORIES.slice(0, 8).map(cat => (
                   <button
@@ -236,12 +221,12 @@ export function Marketplace() {
 
             {/* Plan Filter */}
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">نوع العضوية</label>
+              <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{t('marketplace.membership')}</label>
               <div className="flex gap-2">
                 {[
-                  { id: 'all', label: 'الكل' },
-                  { id: 'free', label: 'أساسية' },
-                  { id: 'pro', label: 'محترفة PRO' }
+                  { id: 'all', label: t('common.all') },
+                  { id: 'free', label: i18n.language === 'ar' ? 'أساسية' : 'Basic' },
+                  { id: 'pro', label: 'Pro' }
                 ].map(p => (
                   <button
                     key={p.id}
@@ -261,7 +246,7 @@ export function Marketplace() {
 
             {/* Rating Filter */}
             <div>
-              <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">التقييم الأدنى</label>
+              <label className="text-xs font-bold text-slate-400 uppercase mb-3 block">{t('marketplace.rating')}</label>
               <div className="flex flex-col gap-3">
                 {[0, 3, 4, 4.5].map(r => (
                   <button
@@ -274,7 +259,7 @@ export function Marketplace() {
                         : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                     )}
                   >
-                    <span>{r === 0 ? "جميع التقييمات" : `${r} نجوم فما فوق`}</span>
+                    <span>{r === 0 ? (i18n.language === 'ar' ? "جميع التقييمات" : "All Ratings") : (i18n.language === 'ar' ? `${r} نجوم فما فوق` : `${r} Stars & Above`)}</span>
                     {r > 0 && (
                       <div className="flex gap-0.5">
                         {[1, 2, 3, 4, 5].map(star => (
@@ -293,7 +278,7 @@ export function Marketplace() {
             <div className="md:col-span-3 pt-4 border-t border-slate-100">
               <label className="text-xs font-bold text-slate-400 uppercase mb-3 block italic flex items-center gap-2">
                 <Users size={12} />
-                تصفية حسب الموقع الجغرافي (الدولة)
+                {t('marketplace.location')}
               </label>
               
               <div className="flex flex-wrap gap-2 mb-4">
@@ -306,9 +291,9 @@ export function Marketplace() {
                       : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
                   )}
                 >
-                  جميع الدول
+                  {i18n.language === 'ar' ? 'جميع الدول' : 'All Countries'}
                 </button>
-                {["مصر", "السعودية", "الإمارات", "الأردن", "المغرب", "عالمي"].map(c => {
+                {(i18n.language === 'ar' ? ["مصر", "السعودية", "الإمارات", "الأردن", "المغرب", "عالمي"] : ["Egypt", "Saudi Arabia", "UAE", "Jordan", "Morocco", "Global"]).map(c => {
                   const isSelected = countryFilter.includes(c);
                   return (
                     <button 
@@ -334,7 +319,7 @@ export function Marketplace() {
               </div>
 
               <div className="relative">
-                <Users className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                <Users className={cn("absolute top-1/2 -translate-y-1/2 text-slate-400", i18n.language === 'ar' ? 'right-3' : 'left-3')} size={16} />
                 <input 
                   list="countries-list"
                   type="text" 
@@ -345,8 +330,11 @@ export function Marketplace() {
                       setCountryFilter(prev => [...prev, val]);
                     }
                   }}
-                  placeholder="ابحث وأضف دولة أخرى..." 
-                  className="pr-10 pl-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full text-sm"
+                  placeholder={i18n.language === 'ar' ? "ابحث وأضف دولة أخرى..." : "Search and add another country..."} 
+                  className={cn(
+                    "py-3 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-full text-sm",
+                    i18n.language === 'ar' ? 'pr-10 pl-4' : 'pl-10 pr-4'
+                  )}
                 />
                 <datalist id="countries-list">
                   <option value="مصر" />
@@ -388,15 +376,13 @@ export function Marketplace() {
                   ))}
                 </div>
               )}
-              
-              <p className="text-[10px] text-slate-400 mt-2">يمكنك اختيار عدة دول في نفس الوقت للبحث عن زملاء ومقايضين.</p>
             </div>
           </div>
           
           <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
             <button 
               onClick={() => {
-                setSelectedCategory("الكل");
+                setSelectedCategory(t('common.all'));
                 setPlanFilter("all");
                 setRatingFilter(0);
                 setCountryFilter([]);
@@ -404,7 +390,7 @@ export function Marketplace() {
               }}
               className="px-4 py-2 text-xs font-bold text-slate-400 hover:text-slate-600"
             >
-              إعادة ضبط الفلاتر
+              {i18n.language === 'ar' ? "إعادة ضبط الفلاتر" : "Reset Filters"}
             </button>
           </div>
         </motion.div>
@@ -422,9 +408,9 @@ export function Marketplace() {
       )}
 
       {loading ? (
-        <div className="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6 md:space-y-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {[1, 2, 3, 4, 5, 6].map(i => (
-            <div key={i} className="break-inside-avoid mb-6 bg-white p-6 rounded-3xl border border-slate-50 relative overflow-hidden shadow-sm" style={{ height: i % 2 === 0 ? '320px' : '380px' }}>
+            <div key={i} className="bg-white p-6 rounded-3xl h-80 border border-slate-50 relative overflow-hidden shadow-sm">
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-12 h-12 rounded-full bg-slate-100 animate-pulse" />
                 <div className="space-y-2 flex-1">
@@ -443,16 +429,16 @@ export function Marketplace() {
       ) : filteredUsers.length === 0 ? (
         <div className="text-center py-24 bg-white rounded-3xl border border-slate-100">
           <Users size={48} className="mx-auto text-slate-200 mb-4" />
-          <p className="text-slate-400">لم يتم العثور على مقايضين متاحين حالياً.</p>
+          <p className="text-slate-400">{i18n.language === 'ar' ? "لم يتم العثور على مقايضين متاحين حالياً." : "No barters found at the moment."}</p>
         </div>
       ) : (
-        <div className="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6 md:space-y-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredUsers.map((item) => (
             <motion.div 
               key={item.id}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="break-inside-avoid mb-6 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group"
+              className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl transition-all group"
             >
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -473,7 +459,7 @@ export function Marketplace() {
                         {item.testimonials?.length >= 3 && (
                           <span className="flex items-center gap-1 text-[9px] font-black text-white bg-emerald-500 px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-lg shadow-emerald-500/30 border border-emerald-400 animate-in fade-in zoom-in duration-500">
                             <CheckCircle size={10} className="fill-white text-emerald-500" />
-                            <span>موثوق</span>
+                            <span>{t('marketplace.reliable')}</span>
                           </span>
                         )}
                       </div>
@@ -485,7 +471,7 @@ export function Marketplace() {
                       <div className="flex items-center gap-1.5">
                         <div className="flex items-center gap-1 text-[10px] text-slate-400">
                           <Clock size={10} />
-                          <span>{new Date(item.createdAt?.seconds * 1000).toLocaleDateString('ar-SA')}</span>
+                          <span>{new Date(item.createdAt?.seconds * 1000).toLocaleDateString(i18n.language === 'ar' ? 'ar-SA' : 'en-US')}</span>
                         </div>
                         {item.country && (
                           <div className="flex items-center gap-1 text-[10px] text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
@@ -504,9 +490,9 @@ export function Marketplace() {
                       target="_blank" 
                       rel="noopener noreferrer" 
                       className="p-2 bg-slate-50 text-slate-400 rounded-lg hover:text-blue-600 hover:bg-blue-50 transition-all border border-slate-100"
-                      title="معرض الأعمال"
+                      title={i18n.language === 'ar' ? "معرض الأعمال" : "Portfolio"}
                     >
-                      <Sparkles size={16} />
+                      <ArrowLeftRight size={16} />
                     </a>
                   )}
                   {item.testimonials?.length > 0 && (
@@ -526,39 +512,20 @@ export function Marketplace() {
 
               <div className="space-y-4 mb-6">
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-blue-500 block mb-2">يعرض المقايض:</span>
+                  <span className="text-[10px] uppercase font-bold text-blue-500 block mb-2">{t('marketplace.skillsOffered')}</span>
                   <div className="space-y-2">
                     {item.skillsOffered?.slice(0, 3).map((s: Skill, idx: number) => {
-                      const IconComp = s.icon && SKILL_ICONS_MAP[s.icon] ? SKILL_ICONS_MAP[s.icon] : Sparkles;
+                      const Icon = s.icon && SKILL_ICONS_MAP[s.icon] ? SKILL_ICONS_MAP[s.icon] : GlobeIcon;
                       return (
                         <div key={idx} className="flex flex-col p-2 bg-blue-50/50 rounded-lg group/skill">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 bg-white rounded flex items-center justify-center text-blue-500 shadow-sm">
-                                <IconComp size={10} />
-                              </div>
+                              <Icon size={14} className="text-blue-500" />
                               <span className="text-xs text-slate-700 font-medium">
-                                {translations[`skill-name-${item.id}-${idx}`] || s.name}
+                                <TranslatableContent content={s.name} />
                               </span>
-                              {s.url && (
-                                <a 
-                                  href={s.url.startsWith('http') ? s.url : `https://${s.url}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-400 hover:text-blue-600"
-                                >
-                                  <Sparkles size={10} />
-                                </a>
-                              )}
                             </div>
                             <div className="flex gap-2">
-                              <button 
-                                onClick={() => handleTranslate(`skill-name-${item.id}-${idx}`, s.name)}
-                                disabled={translatingIds.has(`skill-name-${item.id}-${idx}`)}
-                                className="text-[8px] text-blue-400 hover:text-blue-600 opacity-0 group-hover/skill:opacity-100 transition-opacity"
-                              >
-                                {translatingIds.has(`skill-name-${item.id}-${idx}`) ? "..." : <Languages size={10} />}
-                              </button>
                               <button 
                                 onClick={(e) => {
                                   e.stopPropagation();
@@ -566,41 +533,41 @@ export function Marketplace() {
                                 }}
                                 className="text-[10px] font-bold text-blue-600 hover:text-blue-800 opacity-0 group-hover/skill:opacity-100 transition-opacity"
                               >
-                                طلب هذه المهارة
+                                {t('marketplace.requestTrade')}
                               </button>
                             </div>
                           </div>
+                          {s.description && (
+                            <TranslatableContent 
+                              content={s.description} 
+                              className="text-[10px] text-slate-500 mt-1" 
+                              autoTranslate 
+                            />
+                          )}
                         </div>
                       );
-                    }) || <p className="text-xs text-slate-400">لا توجد مهارات معروضة</p>}
+                    }) || <p className="text-xs text-slate-400">{i18n.language === 'ar' ? "لا توجد مهارات معروضة" : "No skills offered"}</p>}
                   </div>
                 </div>
                 <div>
-                  <span className="text-[10px] uppercase font-bold text-amber-500 block mb-2">يبحث عن:</span>
+                  <span className="text-[10px] uppercase font-bold text-amber-500 block mb-2">{t('marketplace.skillsWanted')}</span>
                   <div className="flex flex-wrap gap-1.5">
                     {item.skillsWanted?.slice(0, 3).map((s: Skill, idx: number) => (
                       <span key={idx} className="px-2 py-1 bg-amber-50 text-amber-600 rounded-md text-[10px] font-bold border border-amber-100">
-                        {s.name}
+                        <TranslatableContent content={s.name} />
                       </span>
-                    )) || <p className="text-xs text-slate-400">لا توجد طلبات</p>}
+                    )) || <p className="text-xs text-slate-400">{i18n.language === 'ar' ? "لا توجد طلبات" : "No requests"}</p>}
                   </div>
                 </div>
               </div>
 
               <div className="flex gap-2">
                 <button 
-                  onClick={() => handleAnalyze(item)}
-                  className="flex-1 py-3 bg-blue-50 text-blue-600 rounded-xl font-bold text-xs hover:bg-blue-100 transition-colors flex items-center justify-center gap-2"
-                >
-                  تحليل
-                  <Wand2 size={14} />
-                </button>
-                <button 
                   disabled={submitting === item.id}
                   onClick={() => handleTradeRequest(item)}
-                  className="flex-[2] py-3 bg-slate-900 text-white rounded-xl font-bold text-xs tracking-wide hover:bg-black transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-xs tracking-wide hover:bg-black transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  {submitting === item.id ? "جاري الإرسال..." : "طلب مقايضة"}
+                  {submitting === item.id ? (i18n.language === 'ar' ? "جاري الإرسال..." : "Sending...") : t('marketplace.requestTrade')}
                   <ArrowLeftRight size={14} />
                 </button>
               </div>

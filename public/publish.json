@@ -1,0 +1,29 @@
+{
+  "project_name": "Barter - Global Pro Skill Exchange",
+  "version": "1.0.0-publish",
+  "status": "production-ready",
+  "features": [
+    "Real-time professional skill matching",
+    "Multi-currency points wallet (Wallet)",
+    "Subscription plans (Free, Pro)",
+    "Community global feed",
+    "AI-powered translation",
+    "Trade request management",
+    "Testimonials and reviews"
+  ],
+  "technologies": [
+    "React 19",
+    "Vite",
+    "Tailwind CSS",
+    "Firebase Firestore & Auth",
+    "i18next",
+    "Gemini AI"
+  ],
+  "config": {
+    "public_access": true,
+    "theme": "dark/modern",
+    "language": "Arabic (RTL) / English"
+  },
+  "published_at": "2026-05-17T20:25:00Z",
+  "url": "https://ais-pre-qd3xlu7wsuvtblsps3d6bn-462516633203.europe-west1.run.app"
+}

@@ -8,7 +8,10 @@ import { Notifications } from './pages/Notifications.tsx';
 import { Support } from './pages/Support.tsx';
 import { Subscription } from './pages/Subscription.tsx';
 import { Community } from './pages/Community.tsx';
+import ServerStatus from './pages/ServerStatus.tsx';
+import Wallet from './pages/Wallet.tsx';
 import { AuthProvider } from './context/AuthContext.tsx';
+import './i18n';
 import './index.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -23,6 +26,8 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/support" element={<Support />} />
           <Route path="/subscription" element={<Subscription />} />
+          <Route path="/server-status" element={<ServerStatus />} />
+          <Route path="/wallet" element={<Wallet />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

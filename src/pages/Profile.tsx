@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Mail, Shield, Plus, X, Save, Link as LinkIcon, MessageSquare, Quote, Star, Sparkles, Clock, CheckCircle2, XCircle, MapPin, Search, ArrowLeftRight, Calendar } from 'lucide-react';
+import { User, Mail, Shield, Plus, X, Save, Link as LinkIcon, MessageSquare, Quote, Star, Clock, CheckCircle2, XCircle, MapPin, Search, ArrowLeftRight, Calendar, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useState, useEffect } from 'react';
 import { cn } from '../lib/utils';
@@ -7,9 +7,10 @@ import { doc, updateDoc, collection, query, where, onSnapshot, orderBy } from 'f
 import { db } from '../lib/firebase';
 import { toast } from 'react-hot-toast';
 import { handleFirestoreError, OperationType } from '../lib/error-handler';
-import { generateBio, generateSkillDescription, suggestRelatedSkills, searchSkillsAI, suggestSkillIcon } from '../services/geminiService';
 import { updateTradeStatus, addTradeReview } from '../services/tradeService';
 import { Skill, SKILL_ICONS_MAP, SKILL_ICONS_LIST } from '../constants';
+import { useTranslation } from 'react-i18next';
+import { TranslatableContent } from '../components/TranslatableContent';
 
 interface Testimonial {
   author: string;
@@ -57,18 +58,20 @@ const PREDEFINED_AVATARS = [
 ];
 
 export function Profile() {
-  const { user, profile } = useAuth();
+  const { user, profile, logout } = useAuth();
+  const { t, i18n } = useTranslation();
   const [offered, setOffered] = useState<Skill[]>([]);
   const [wanted, setWanted] = useState<Skill[]>([]);
   const [offeredSkill, setOfferedSkill] = useState("");
   const [offeredDesc, setOfferedDesc] = useState("");
   const [offeredUrl, setOfferedUrl] = useState("");
-  const [offeredIcon, setOfferedIcon] = useState("Sparkles");
+  const [offeredIcon, setOfferedIcon] = useState("Star");
   const [offeredCat, setOfferedCat] = useState(CATEGORIES[0]);
   
   const [wantedSkill, setWantedSkill] = useState("");
   const [wantedDesc, setWantedDesc] = useState("");
   const [wantedUrl, setWantedUrl] = useState("");
+  const [wantedIcon, setWantedIcon] = useState("Star");
   const [wantedCat, setWantedCat] = useState(CATEGORIES[0]);
   
   const [username, setUsername] = useState("");
@@ -84,14 +87,9 @@ export function Profile() {
   const [detectingLocation, setDetectingLocation] = useState(false);
   const [offeredSearch, setOfferedSearch] = useState("");
   const [wantedSearch, setWantedSearch] = useState("");
-  const [offeredSuggestions, setOfferedSuggestions] = useState<Skill[]>([]);
-  const [wantedSuggestions, setWantedSuggestions] = useState<Skill[]>([]);
-  const [isSearchingOffered, setIsSearchingOffered] = useState(false);
-  const [isSearchingWanted, setIsSearchingWanted] = useState(false);
-  const [aiBioLoading, setAiBioLoading] = useState(false);
-  const [aiSkillLoading, setAiSkillLoading] = useState(false);
-  const [aiSuggestionsLoading, setAiSuggestionsLoading] = useState(false);
-  const [suggestedSkills, setSuggestedSkills] = useState<Skill[]>([]);
+  
+  // Editing state
+  const [editingSkill, setEditingSkill] = useState<{ type: 'offered' | 'wanted', originalName: string } | null>(null);
 
   // Trade History
   const [trades, setTrades] = useState<Trade[]>([]);
@@ -218,94 +216,6 @@ export function Profile() {
     }
   };
 
-  const handleAIBio = async () => {
-    if (offered.length === 0) {
-      toast.error("أضف مهاراتك أولاً لنتمكن من توليد نبذة مناسبة");
-      return;
-    }
-    setAiBioLoading(true);
-    try {
-      const generated = await generateBio(offered);
-      if (generated) {
-        const userRef = doc(db, 'users', user.uid);
-        await updateDoc(userRef, { bio: generated });
-        toast.success("تم توليد النبذة بالذكاء الاصطناعي");
-      }
-    } catch (error) {
-      console.error(error);
-      toast.error("فشل توليد النبذة");
-    } finally {
-      setAiBioLoading(false);
-    }
-  };
-
-  const handleAISkillDesc = async (type: 'offered' | 'wanted') => {
-    const skillName = type === 'offered' ? offeredSkill : wantedSkill;
-    const category = type === 'offered' ? offeredCat : wantedCat;
-    
-    if (!skillName) {
-      toast.error("اكتب اسم المهارة أولاً");
-      return;
-    }
-    
-    setAiSkillLoading(true);
-    try {
-      const descPromise = generateSkillDescription(skillName, category);
-      const iconPromise = type === 'offered' ? suggestSkillIcon(skillName, category) : Promise.resolve(null);
-      
-      const [desc, icon] = await Promise.all([descPromise, iconPromise]);
-      
-      if (desc) {
-        if (type === 'offered') setOfferedDesc(desc);
-        else setWantedDesc(desc);
-      }
-      if (icon) {
-        setOfferedIcon(icon);
-      }
-      toast.success("تم توليد التفاصيل");
-    } catch (error) {
-      console.error(error);
-      toast.error("فشل توليد الوصف");
-    } finally {
-      setAiSkillLoading(false);
-    }
-  };
-
-  const handleGetSuggestions = async () => {
-    if (offered.length === 0 && wanted.length === 0) {
-      toast.error("أضف بعض المهارات أولاً نتمكن من تقديم اقتراحات");
-      return;
-    }
-    setAiSuggestionsLoading(true);
-    try {
-      const suggestions = await suggestRelatedSkills(offered, wanted);
-      setSuggestedSkills(suggestions);
-      toast.success("تم العثور على مهارات قد تهمك!");
-    } catch (error) {
-      console.error(error);
-      toast.error("فشل الحصول على اقتراحات");
-    } finally {
-      setAiSuggestionsLoading(false);
-    }
-  };
-
-  const handleAISearch = async (keyword: string, type: 'offered' | 'wanted') => {
-    if (!keyword || keyword.length < 2) return;
-    if (type === 'offered') setIsSearchingOffered(true);
-    else setIsSearchingWanted(true);
-    
-    try {
-      const results = await searchSkillsAI(keyword);
-      if (type === 'offered') setOfferedSuggestions(results);
-      else setWantedSuggestions(results);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      if (type === 'offered') setIsSearchingOffered(false);
-      else setIsSearchingWanted(false);
-    }
-  };
-
   const handleAddTestimonial = async () => {
     if (!newTestimonialAuthor || !newTestimonialText) return;
     const updatedTestimonials = [...testimonials, { author: newTestimonialAuthor, text: newTestimonialText, rating: 5 }];
@@ -347,7 +257,7 @@ export function Profile() {
     }
   };
 
-  const handleUpdateSkills = async (type: 'offered' | 'wanted', action: 'add' | 'remove', skillObj?: Skill) => {
+  const handleUpdateSkills = async (type: 'offered' | 'wanted', action: 'add' | 'remove' | 'update', skillObj?: Skill) => {
     if (action === 'remove' && !showConfirm) {
       setConfirmData({ type: 'skill', payload: { type, skillObj } });
       setShowConfirm(true);
@@ -356,35 +266,53 @@ export function Profile() {
 
     const skillNameToAdd = skillObj?.name || (type === 'offered' ? offeredSkill : wantedSkill);
     const categoryToAdd = skillObj?.category || (type === 'offered' ? offeredCat : wantedCat);
-    const descriptionToAdd = skillObj?.description || (type === 'offered' ? offeredDesc : wantedDesc);
-    const urlToAdd = skillObj?.url || (type === 'offered' ? offeredUrl : wantedUrl);
-    const iconToAdd = skillObj?.icon || (type === 'offered' ? offeredIcon : undefined);
+    let descriptionToAdd = skillObj?.description || (type === 'offered' ? offeredDesc : wantedDesc);
     
-    if (action === 'add' && !skillNameToAdd) return;
+    // Add default description for offered skills if empty during add/update
+    if (type === 'offered' && !descriptionToAdd?.trim() && (action === 'add' || action === 'update')) {
+      descriptionToAdd = "مستعد لمشاركة خبرتي في هذه المهارة وتقديم الدعم والمساعدة بأفضل جودة ممكنة للشركاء المهتمين.";
+    }
+
+    const urlToAdd = skillObj?.url || (type === 'offered' ? offeredUrl : wantedUrl);
+    const iconToAdd = skillObj?.icon || (type === 'offered' ? offeredIcon : wantedIcon);
+    
+    if ((action === 'add' || action === 'update') && !skillNameToAdd) return;
     
     setLoading(true);
     let updatedOffered = [...offered];
     let updatedWanted = [...wanted];
 
-    if (type === 'offered') {
-      if (action === 'add') {
-        if (!updatedOffered.find(s => s.name === skillNameToAdd)) {
-          updatedOffered.push({ name: skillNameToAdd, category: categoryToAdd, description: descriptionToAdd, url: urlToAdd, icon: iconToAdd });
+      if (type === 'offered') {
+        if (action === 'add') {
+          if (!updatedOffered.find(s => s.name === skillNameToAdd)) {
+            updatedOffered.push({ name: skillNameToAdd, category: categoryToAdd, description: descriptionToAdd, url: urlToAdd, icon: iconToAdd });
+          }
+        } else if (action === 'update' && editingSkill) {
+          updatedOffered = updatedOffered.map(s => 
+            s.name === editingSkill.originalName 
+              ? { name: skillNameToAdd, category: categoryToAdd, description: descriptionToAdd, url: urlToAdd, icon: iconToAdd }
+              : s
+          );
+        }
+        else if (skillObj) {
+          updatedOffered = updatedOffered.filter(s => s.name !== skillObj.name);
+        }
+      } else {
+        if (action === 'add') {
+          if (!updatedWanted.find(s => s.name === skillNameToAdd)) {
+            updatedWanted.push({ name: skillNameToAdd, category: categoryToAdd, description: descriptionToAdd, url: urlToAdd, icon: iconToAdd });
+          }
+        } else if (action === 'update' && editingSkill) {
+          updatedWanted = updatedWanted.map(s => 
+            s.name === editingSkill.originalName 
+              ? { name: skillNameToAdd, category: categoryToAdd, description: descriptionToAdd, url: urlToAdd, icon: iconToAdd }
+              : s
+          );
+        }
+        else if (skillObj) {
+          updatedWanted = updatedWanted.filter(s => s.name !== skillObj.name);
         }
       }
-      else if (skillObj) {
-        updatedOffered = updatedOffered.filter(s => s.name !== skillObj.name);
-      }
-    } else {
-      if (action === 'add') {
-        if (!updatedWanted.find(s => s.name === skillNameToAdd)) {
-          updatedWanted.push({ name: skillNameToAdd, category: categoryToAdd, description: descriptionToAdd, url: urlToAdd });
-        }
-      }
-      else if (skillObj) {
-        updatedWanted = updatedWanted.filter(s => s.name !== skillObj.name);
-      }
-    }
 
     try {
       const userRef = doc(db, 'users', user.uid);
@@ -394,19 +322,23 @@ export function Profile() {
       });
       setOffered(updatedOffered);
       setWanted(updatedWanted);
-      if (!skillObj) {
-        if (type === 'offered') {
-          setOfferedSkill("");
-          setOfferedDesc("");
-          setOfferedUrl("");
-          setOfferedIcon("Sparkles");
-        } else {
-          setWantedSkill("");
-          setWantedDesc("");
-          setWantedUrl("");
-        }
+      if (action !== 'remove') {
+          if (type === 'offered') {
+            setOfferedSkill("");
+            setOfferedDesc("");
+            setOfferedUrl("");
+            setOfferedIcon("Star");
+            setOfferedCat(CATEGORIES[0]);
+          } else {
+            setWantedSkill("");
+            setWantedDesc("");
+            setWantedUrl("");
+            setWantedIcon("Star");
+            setWantedCat(CATEGORIES[0]);
+          }
+        setEditingSkill(null);
       }
-      toast.success("تم التحديث بنجاح");
+      toast.success(action === 'update' ? "تم التحديث بنجاح" : "تمت العملية بنجاح");
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `users/${user.uid}`);
     } finally {
@@ -416,9 +348,36 @@ export function Profile() {
     }
   };
 
+  const startEditing = (type: 'offered' | 'wanted', skill: Skill) => {
+    setEditingSkill({ type, originalName: skill.name });
+    if (type === 'offered') {
+      setOfferedSkill(skill.name);
+      setOfferedDesc(skill.description || "");
+      setOfferedUrl(skill.url || "");
+      setOfferedIcon(skill.icon || "Star");
+      setOfferedCat(skill.category || CATEGORIES[0]);
+    } else {
+      setWantedSkill(skill.name);
+      setWantedDesc(skill.description || "");
+      setWantedUrl(skill.url || "");
+      setWantedIcon(skill.icon || "Star");
+      setWantedCat(skill.category || CATEGORIES[0]);
+    }
+    // Scroll to the form
+    window.scrollTo({ top: type === 'offered' ? 600 : 800, behavior: 'smooth' });
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-8">
-      <div className="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
+      <div className="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm relative">
+        <button 
+          onClick={logout}
+          className="absolute top-8 left-8 p-3 bg-red-50 text-red-500 rounded-2xl hover:bg-red-100 transition-all flex items-center gap-2 text-xs font-bold shadow-sm"
+          title="تسجيل الخروج"
+        >
+          <LogOut size={16} />
+          <span className="hidden sm:inline">تسجيل الخروج</span>
+        </button>
         <div className="flex flex-col md:flex-row items-center gap-8">
           <div className="relative group">
             <div className="w-32 h-32 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 relative overflow-hidden border-4 border-white shadow-xl">
@@ -449,7 +408,7 @@ export function Profile() {
                     value={username}
                     onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ''))}
                     onBlur={() => handleUpdateProfile('username', username)}
-                    placeholder="اسم_المستخدم"
+                    placeholder={i18n.language === 'ar' ? "اسم_المستخدم" : "username"}
                     className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-sm font-bold text-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-500 w-40"
                   />
                   <button onClick={() => handleUpdateProfile('username', username)} className="p-1 hover:bg-slate-50 rounded text-slate-400">
@@ -457,18 +416,14 @@ export function Profile() {
                   </button>
                 </div>
               </div>
-              
-              <button 
-                onClick={handleAIBio}
-                disabled={aiBioLoading || offered.length === 0}
-                className="p-1 px-3 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold border border-blue-100 flex items-center gap-2 hover:bg-blue-100 transition-colors disabled:opacity-50"
-                title="توليد نبذة باستخدام الذكاء الاصطناعي"
-              >
-                <Sparkles size={14} className={aiBioLoading ? "animate-spin" : ""} />
-                {aiBioLoading ? "جاري التوليد..." : "تحسين بالذكاء الاصطناعي"}
-              </button>
             </div>
-            <p className="text-slate-500 mb-6 leading-relaxed max-w-2xl">{profile?.bio || "لا يوجد وصف مدخل حتى الآن. أضف مهاراتك ثم استخدم زر التحسين بالذكاء الاصطناعي!"}</p>
+            <div className="text-slate-500 mb-6 leading-relaxed max-w-2xl">
+              {profile?.bio ? (
+                <TranslatableContent content={profile.bio} autoTranslate />
+              ) : (
+                <p>{i18n.language === 'ar' ? "لا يوجد وصف مدخل حتى الآن." : "No description entered yet."}</p>
+              )}
+            </div>
             
             {showAvatarPicker && (
               <motion.div 
@@ -630,7 +585,7 @@ export function Profile() {
         <section className="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
           <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
             <MessageSquare className="text-blue-500" />
-            توصيات وشهادات العملاء
+            {t('profile.testimonials')}
           </h2>
 
           <div className="space-y-4 mb-8">
@@ -686,7 +641,7 @@ export function Profile() {
         {/* Skills Offered */}
         <section className="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-bold">مهاراتي التي أعرضها</h2>
+            <h2 className="text-xl font-bold">{t('profile.skillsOffered')}</h2>
           </div>
           <p className="text-xs text-slate-400 mb-6 font-medium">ما الذي تتقنه وتريد مقايضته؟</p>
           
@@ -733,15 +688,6 @@ export function Profile() {
                     })}
                   </div>
                 </div>
-
-                <button 
-                  onClick={() => handleAISkillDesc('offered')}
-                  disabled={aiSkillLoading || !offeredSkill}
-                  className="flex items-center gap-1 text-[10px] font-bold text-blue-500 hover:text-blue-700 disabled:opacity-50"
-                >
-                  <Sparkles size={10} className={aiSkillLoading ? "animate-spin" : ""} />
-                  توليد وصف تلقائي
-                </button>
               </div>
               <div className="flex flex-col gap-2">
                 <select 
@@ -751,13 +697,34 @@ export function Profile() {
                 >
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <button 
-                  disabled={loading}
-                  onClick={() => handleUpdateSkills('offered', 'add')}
-                  className="flex-1 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center p-2"
-                >
-                  <Plus size={20} />
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button 
+                    disabled={loading}
+                    onClick={() => handleUpdateSkills('offered', editingSkill?.type === 'offered' ? 'update' : 'add')}
+                    className={cn(
+                      "flex-1 text-white rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center p-2",
+                      editingSkill?.type === 'offered' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-blue-600 hover:bg-blue-700"
+                    )}
+                    title={editingSkill?.type === 'offered' ? "حفظ التغييرات" : "إضافة المهارة"}
+                  >
+                    {editingSkill?.type === 'offered' ? <Save size={20} /> : <Plus size={20} />}
+                  </button>
+                  {editingSkill?.type === 'offered' && (
+                    <button 
+                      onClick={() => {
+                        setEditingSkill(null);
+                        setOfferedSkill("");
+                        setOfferedDesc("");
+                        setOfferedUrl("");
+                        setOfferedIcon("Star");
+                      }}
+                      className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"
+                      title="إلغاء التعديل"
+                    >
+                      <X size={20} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -771,23 +738,10 @@ export function Profile() {
                 value={offeredSearch}
                 onChange={(e) => {
                   setOfferedSearch(e.target.value);
-                  if (e.target.value.length === 0) setOfferedSuggestions([]);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAISearch(offeredSearch, 'offered');
-                }}
-                placeholder="ابحث في المهارات الشائعة أو اضغط Enter للبحث بالذكاء الاصطناعي..."
+                placeholder="ابحث في المهارات الشائعة..."
                 className="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs"
               />
-              {offeredSearch.length > 2 && (
-                <button 
-                  onClick={() => handleAISearch(offeredSearch, 'offered')}
-                  disabled={isSearchingOffered}
-                  className="absolute left-2 top-1.5 px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
-                >
-                  {isSearchingOffered ? "جاري البحث..." : "بحث ذكي"}
-                </button>
-              )}
             </div>
             
             <div className="flex flex-wrap gap-1.5">
@@ -807,40 +761,7 @@ export function Profile() {
                 </button>
               ))}
 
-              {/* AI Search Suggestions */}
-              {offeredSuggestions.length > 0 && (
-                <div className="grid grid-cols-1 gap-2 mt-4 w-full">
-                  <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest block mb-1">نتائج البحث الذكي:</span>
-                  {offeredSuggestions.map((s, idx) => (
-                    <motion.div 
-                      key={`ai-offered-result-${idx}`}
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="p-3 bg-blue-50/50 border border-blue-100 rounded-2xl flex items-start justify-between group hover:bg-blue-50 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="text-sm font-bold text-blue-900">{s.name}</h4>
-                          <span className="text-[9px] px-1.5 py-0.5 bg-blue-100 text-blue-600 rounded-full font-bold">{s.category}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 leading-relaxed">{s.description}</p>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          handleUpdateSkills('offered', 'add', s);
-                          setOfferedSuggestions(prev => prev.filter((_, i) => i !== idx));
-                        }}
-                        className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-600/10 active:scale-95"
-                        title="إضافة للملف"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-
-              {offeredSearch.length > 2 && COMMON_SKILLS.filter(s => s.name.includes(offeredSearch)).length === 0 && offeredSuggestions.length === 0 && !isSearchingOffered && (
+              {offeredSearch.length > 2 && COMMON_SKILLS.filter(s => s.name.includes(offeredSearch)).length === 0 && (
                 <button 
                   onClick={() => {
                     setOfferedSkill(offeredSearch);
@@ -856,7 +777,13 @@ export function Profile() {
 
           <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-50">
             {offered.map((s) => (
-              <SkillBadge key={s.name} skill={s} color="blue" onRemove={() => handleUpdateSkills('offered', 'remove', s)} />
+              <SkillBadge 
+                key={s.name} 
+                skill={s} 
+                color="blue" 
+                onRemove={() => handleUpdateSkills('offered', 'remove', s)} 
+                onEdit={() => startEditing('offered', s)}
+              />
             ))}
           </div>
         </section>
@@ -864,7 +791,7 @@ export function Profile() {
         {/* Skills Wanted */}
         <section className="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-bold">مهارات أحتاج إليها</h2>
+            <h2 className="text-xl font-bold">{t('profile.skillsWanted')}</h2>
           </div>
           <p className="text-xs text-slate-400 mb-6 font-medium">ما هي الخدمات التي تبحث عنها؟</p>
 
@@ -890,14 +817,27 @@ export function Profile() {
                   placeholder="رابط مرجعي للخدمة المطلوبة (اختياري)..." 
                   className="w-full px-4 py-2 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm"
                 />
-                <button 
-                  onClick={() => handleAISkillDesc('wanted')}
-                  disabled={aiSkillLoading || !wantedSkill}
-                  className="flex items-center gap-1 text-[10px] font-bold text-amber-500 hover:text-amber-700 disabled:opacity-50"
-                >
-                  <Sparkles size={10} className={aiSkillLoading ? "animate-spin" : ""} />
-                  توليد وصف تلقائي
-                </button>
+
+                <div className="space-y-2">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">اختر أيقونة للمهارة:</span>
+                  <div className="flex flex-wrap gap-2 p-3 bg-slate-50 border border-slate-100 rounded-2xl">
+                    {SKILL_ICONS_LIST.map(iconName => {
+                      const IconComp = SKILL_ICONS_MAP[iconName];
+                      return (
+                        <button 
+                          key={iconName}
+                          onClick={() => setWantedIcon(iconName)}
+                          className={cn(
+                            "p-2 rounded-xl border transition-all",
+                            wantedIcon === iconName ? "bg-amber-600 text-white border-amber-600" : "bg-white text-slate-400 border-slate-100 hover:border-slate-200"
+                          )}
+                        >
+                          <IconComp size={16} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               </div>
               <div className="flex flex-col gap-2">
                 <select 
@@ -907,13 +847,34 @@ export function Profile() {
                 >
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-                <button 
-                  disabled={loading}
-                  onClick={() => handleUpdateSkills('wanted', 'add')}
-                  className="flex-1 bg-amber-600 text-white rounded-xl hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center p-2"
-                >
-                  <Plus size={20} />
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button 
+                    disabled={loading}
+                    onClick={() => handleUpdateSkills('wanted', editingSkill?.type === 'wanted' ? 'update' : 'add')}
+                    className={cn(
+                      "flex-1 text-white rounded-xl transition-colors disabled:opacity-50 flex items-center justify-center p-2",
+                      editingSkill?.type === 'wanted' ? "bg-emerald-600 hover:bg-emerald-700" : "bg-amber-600 hover:bg-amber-700"
+                    )}
+                    title={editingSkill?.type === 'wanted' ? "حفظ التغييرات" : "إضافة المهارة"}
+                  >
+                    {editingSkill?.type === 'wanted' ? <Save size={20} /> : <Plus size={20} />}
+                  </button>
+                  {editingSkill?.type === 'wanted' && (
+                    <button 
+                      onClick={() => {
+                        setEditingSkill(null);
+                        setWantedSkill("");
+                        setWantedDesc("");
+                        setWantedUrl("");
+                        setWantedIcon("Star");
+                      }}
+                      className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"
+                      title="إلغاء التعديل"
+                    >
+                      <X size={20} />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -927,23 +888,10 @@ export function Profile() {
                 value={wantedSearch}
                 onChange={(e) => {
                   setWantedSearch(e.target.value);
-                  if (e.target.value.length === 0) setWantedSuggestions([]);
                 }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAISearch(wantedSearch, 'wanted');
-                }}
-                placeholder="ابحث في الخدمات الشائعة أو اضغط Enter للبحث بالذكاء الاصطناعي..."
+                placeholder="ابحث في الخدمات الشائعة..."
                 className="w-full pr-10 pl-4 py-2 bg-slate-50 border border-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 text-xs"
               />
-              {wantedSearch.length > 2 && (
-                <button 
-                  onClick={() => handleAISearch(wantedSearch, 'wanted')}
-                  disabled={isSearchingWanted}
-                  className="absolute left-2 top-1.5 px-2 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50"
-                >
-                  {isSearchingWanted ? "جاري البحث..." : "بحث ذكي"}
-                </button>
-              )}
             </div>
 
             <div className="flex flex-wrap gap-1.5">
@@ -963,40 +911,7 @@ export function Profile() {
                 </button>
               ))}
 
-              {/* AI Search Suggestions */}
-              {wantedSuggestions.length > 0 && (
-                <div className="grid grid-cols-1 gap-2 mt-4 w-full">
-                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest block mb-1">نتائج البحث الذكي:</span>
-                  {wantedSuggestions.map((s, idx) => (
-                    <motion.div 
-                      key={`ai-wanted-result-${idx}`}
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="p-3 bg-amber-50/50 border border-amber-100 rounded-2xl flex items-start justify-between group hover:bg-amber-50 transition-colors"
-                    >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h4 className="text-sm font-bold text-amber-900">{s.name}</h4>
-                          <span className="text-[9px] px-1.5 py-0.5 bg-amber-100 text-amber-600 rounded-full font-bold">{s.category}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-500 leading-relaxed">{s.description}</p>
-                      </div>
-                      <button 
-                        onClick={() => {
-                          handleUpdateSkills('wanted', 'add', s);
-                          setWantedSuggestions(prev => prev.filter((_, i) => i !== idx));
-                        }}
-                        className="p-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-all shadow-md shadow-amber-600/10 active:scale-95"
-                        title="إضافة للملف"
-                      >
-                        <Plus size={14} />
-                      </button>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
-
-              {wantedSearch.length > 2 && COMMON_SKILLS.filter(s => s.name.includes(wantedSearch)).length === 0 && wantedSuggestions.length === 0 && !isSearchingWanted && (
+              {wantedSearch.length > 2 && COMMON_SKILLS.filter(s => s.name.includes(wantedSearch)).length === 0 && (
                 <button 
                   onClick={() => {
                     setWantedSkill(wantedSearch);
@@ -1012,84 +927,17 @@ export function Profile() {
 
           <div className="flex flex-wrap gap-2 pt-4 border-t border-slate-50">
             {wanted.map((s) => (
-              <SkillBadge key={s.name} skill={s} color="amber" onRemove={() => handleUpdateSkills('wanted', 'remove', s)} />
+              <SkillBadge 
+                key={s.name} 
+                skill={s} 
+                color="amber" 
+                onRemove={() => handleUpdateSkills('wanted', 'remove', s)} 
+                onEdit={() => startEditing('wanted', s)}
+              />
             ))}
           </div>
         </section>
       </div>
-
-      {/* AI Skill Suggestions */}
-      <section className={cn(
-        "bg-white rounded-3xl border border-slate-100 p-8 shadow-sm relative overflow-hidden transition-all",
-        aiSuggestionsLoading && "opacity-70 grayscale-[0.5]"
-      )}>
-        <div className="absolute top-0 right-0 p-4 opacity-5">
-          <Sparkles size={120} />
-        </div>
-        
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 relative z-10">
-          <div>
-            <h2 className="text-xl font-bold mb-1 flex items-center gap-2">
-              <Sparkles className="text-blue-500" size={24} />
-              اكتشاف مهارات جديدة
-            </h2>
-            <p className="text-xs text-slate-400 font-medium">دع الذكاء الاصطناعي يقترح عليك مهارات تكمل بروفايلك</p>
-          </div>
-          <button 
-            onClick={handleGetSuggestions}
-            disabled={aiSuggestionsLoading}
-            className="px-6 py-3 bg-slate-900 text-white rounded-2xl text-xs font-bold hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50 shadow-xl shadow-slate-900/10"
-          >
-            {aiSuggestionsLoading ? "جاري التحليل..." : "توليد اقتراحات ذكية"}
-            <Sparkles size={16} className={aiSuggestionsLoading ? "animate-spin" : ""} />
-          </button>
-        </div>
-
-        {suggestedSkills.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
-            {suggestedSkills.map((s, idx) => (
-              <motion.div 
-                key={idx}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                className="p-5 bg-slate-50 rounded-2xl border border-slate-100 group relative hover:border-blue-200 transition-colors"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <span className="px-2 py-0.5 bg-white border border-slate-100 rounded text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                    {s.category}
-                  </span>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleUpdateSkills('offered', 'add', s)}
-                      className="p-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors text-[10px] font-bold flex items-center gap-1"
-                      title="أضف لمهاراتك المعروضة"
-                    >
-                      <Plus size={12} />
-                      أقدمها
-                    </button>
-                    <button 
-                      onClick={() => handleUpdateSkills('wanted', 'add', s)}
-                      className="p-1.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors text-[10px] font-bold flex items-center gap-1"
-                      title="أضف لمهاراتك المطلوبة"
-                    >
-                      <Plus size={12} />
-                      أحتاجها
-                    </button>
-                  </div>
-                </div>
-                <h3 className="font-bold text-slate-900 mb-1">{s.name}</h3>
-                <p className="text-[11px] text-slate-500 leading-relaxed">{s.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        ) : !aiSuggestionsLoading && (
-          <div className="text-center py-12 border-2 border-dashed border-slate-100 rounded-3xl">
-            <Sparkles size={32} className="mx-auto text-slate-100 mb-4" />
-            <p className="text-slate-400 text-xs">اضغط على الزر أعلاه للحصول على اقتراحات مهارات مخصصة لك</p>
-          </div>
-        )}
-      </section>
 
       {/* Past Completed Trades & Success Stories */}
       <section className="bg-white rounded-3xl border border-slate-100 p-8 shadow-sm">
@@ -1221,7 +1069,7 @@ export function Profile() {
                               await addTradeReview(t.id, user.uid, targetUserId, isSender, reviewRating, reviewComment, selectedTaggedSkill);
                               setReviewingTradeId(null);
                               toast.success("شكراً لتقييمك!");
-                            } catch (e) { toast.error("فشل إرسال التقييم"); }
+                            } catch { toast.error("فشل إرسال التقييم"); }
                           }}
                           className="flex-1 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-bold hover:bg-blue-700"
                         >
@@ -1541,18 +1389,31 @@ export function Profile() {
   );
 }
 
-function SkillBadge({ skill, color, onRemove }: { skill: Skill; color: 'blue' | 'amber', onRemove: () => any; key?: any }) {
+function SkillBadge({ skill, color, onRemove, onEdit }: { skill: Skill; color: 'blue' | 'amber', onRemove: () => any; onEdit?: () => any; key?: any }) {
   const styles = color === 'blue' 
     ? "bg-blue-50 text-blue-600 border-blue-100 shadow-sm shadow-blue-50/50" 
     : "bg-amber-50 text-amber-600 border-amber-100 shadow-sm shadow-amber-50/50";
     
-  const IconComp = skill.icon && SKILL_ICONS_MAP[skill.icon] ? SKILL_ICONS_MAP[skill.icon] : Sparkles;
+  const IconComp = skill.icon && SKILL_ICONS_MAP[skill.icon] ? SKILL_ICONS_MAP[skill.icon] : Star;
+
+  const completion = (() => {
+    let score = 0;
+    if (color === 'blue') {
+      if (skill.description && skill.description.length > 5) score += 40;
+      if (skill.url) score += 40;
+      if (skill.icon && skill.icon !== 'Star') score += 20;
+    } else {
+      if (skill.description && skill.description.length > 5) score += 50;
+      if (skill.url) score += 50;
+    }
+    return score;
+  })();
 
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className={`px-4 py-3 rounded-2xl text-xs font-medium border flex items-start gap-4 w-full ${styles}`}
+      className={`px-4 py-3 rounded-2xl text-xs font-medium border flex items-start gap-4 w-full group/badge ${styles}`}
     >
       <div className={cn(
         "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
@@ -1561,12 +1422,28 @@ function SkillBadge({ skill, color, onRemove }: { skill: Skill; color: 'blue' | 
         <IconComp size={20} />
       </div>
       <div className="flex-1 flex flex-col gap-1 text-right">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-sm">{skill.name}</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="font-bold text-sm">
+            <TranslatableContent content={skill.name} />
+          </span>
           <span className="text-[10px] opacity-70 font-normal px-1.5 py-0.5 rounded-full border border-current">#{skill.category}</span>
+          
+          <div className="flex items-center gap-2 mr-auto">
+            <div className="w-16 h-1 bg-slate-200/50 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${completion}%` }}
+                className={cn(
+                  "h-full rounded-full transition-all duration-1000",
+                  completion === 100 ? "bg-emerald-500" : (color === 'blue' ? "bg-blue-500" : "bg-amber-500")
+                )}
+              />
+            </div>
+            <span className="text-[8px] font-black opacity-60 tracking-tighter">{completion}%</span>
+          </div>
         </div>
         {skill.description && (
-          <p className="text-[11px] opacity-80 leading-relaxed font-normal">{skill.description}</p>
+          <TranslatableContent content={skill.description} className="text-[11px] opacity-80 leading-relaxed font-normal" autoTranslate />
         )}
         {skill.url && (
           <a 
@@ -1580,9 +1457,22 @@ function SkillBadge({ skill, color, onRemove }: { skill: Skill; color: 'blue' | 
           </a>
         )}
       </div>
-      <button onClick={onRemove} className="hover:opacity-60 transition-opacity p-1 rounded-lg hover:bg-red-50 hover:text-red-500 shrink-0">
-        <X size={16} />
-      </button>
+      <div className="flex flex-col gap-1 opacity-0 group-hover/badge:opacity-100 transition-opacity">
+        <button 
+          onClick={onEdit}
+          className="p-1.5 bg-white/50 rounded-lg hover:bg-white text-slate-600 transition-all shadow-sm"
+          title="تعديل"
+        >
+          <Plus className="rotate-45" size={14} />
+        </button>
+        <button 
+          onClick={onRemove} 
+          className="p-1.5 bg-white/50 rounded-lg hover:bg-red-50 hover:text-red-500 transition-all shadow-sm"
+          title="حذف"
+        >
+          <X size={14} />
+        </button>
+      </div>
     </motion.div>
   );
 }

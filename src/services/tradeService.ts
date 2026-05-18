@@ -96,9 +96,6 @@ export async function addTradeReview(tradeId: string, userId: string, targetUser
     });
 
     // Also add to target user's testimonials as a verified review
-    const userRef = doc(db, 'users', targetUserId);
-    // Note: We'd ideally use arrayUnion here, but let's just update the trade for now 
-    // and handle the reflection in the UI if needed. 
     // To be most robust according to rules, we'd need to fetch and update.
     
     await sendNotification(

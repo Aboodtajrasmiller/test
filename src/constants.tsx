@@ -1,7 +1,7 @@
-import { Sparkles, Code, Palette, Megaphone, PenTool, Briefcase, GraduationCap, Music, Camera, Globe, Languages, Cpu, Layers, Settings } from 'lucide-react';
+import { Star, Code, Palette, Megaphone, PenTool, Briefcase, GraduationCap, Music, Camera, Globe, Languages, Cpu, Layers, Settings } from 'lucide-react';
 
 export const SKILL_ICONS_MAP: Record<string, any> = {
-  Sparkles, Code, Palette, Megaphone, PenTool, Briefcase, GraduationCap, Music, Camera, Globe, Languages, Cpu, Layers, Settings
+  Star, Code, Palette, Megaphone, PenTool, Briefcase, GraduationCap, Music, Camera, Globe, Languages, Cpu, Layers, Settings
 };
 
 export const SKILL_ICONS_LIST = Object.keys(SKILL_ICONS_MAP);

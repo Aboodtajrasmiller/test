@@ -6,17 +6,25 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
-    // --- Helpers ---
+    // --- Primitives ---
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'password');
     }
 
     function isOwner(userId) {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function incoming() {
@@ -27,102 +35,147 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // --- User Rules ---
-    match /users/{userId} {
-      function isValidUser(data) {
-        return data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100
-            && data.email is string && data.email.matches('^.+@.+$')
-            && data.skillsOffered is list && data.skillsOffered.size() <= 20
-            && (data.skillsOffered.size() == 0 || (data.skillsOffered[0] is map && data.skillsOffered[0].name is string && data.skillsOffered[0].category is string && (!('description' in data.skillsOffered[0]) || data.skillsOffered[0].description is string)))
-            && data.skillsWanted is list && data.skillsWanted.size() <= 20
-            && (data.skillsWanted.size() == 0 || (data.skillsWanted[0] is map && data.skillsWanted[0].name is string && data.skillsWanted[0].category is string && (!('description' in data.skillsWanted[0]) || data.skillsWanted[0].description is string)))
-            && data.subscriptionPlan in ['free', 'pro']
-            && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 600))
-            && (!('username' in data) || (data.username is string && data.username.size() >= 3 && data.username.size() <= 30 && data.username.matches('^[a-zA-Z0-9_]+$')))
-            && (!('portfolioUrl' in data) || (data.portfolioUrl is string && data.portfolioUrl.size() <= 300))
-            && (!('country' in data) || (data.country is string && data.country.size() <= 100))
-            && (!('autoTranslate' in data) || data.autoTranslate is bool)
-            && (!('testimonials' in data) || (data.testimonials is list && data.testimonials.size() <= 10));
-      }
+    // --- Validation Helpers ---
 
-      allow get: if isSignedIn();
-      allow list: if isSignedIn(); // Basic marketplace discovery
-      
-      allow create: if isOwner(userId) 
-                    && isValidUser(incoming())
-                    && incoming().createdAt == request.time;
-      
-      allow update: if isOwner(userId)
-                    && isValidUser(incoming())
-                    && incoming().createdAt == existing().createdAt;
+    function isValidUser(data) {
+      return data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100
+          && data.skillsOffered is list && data.skillsOffered.size() <= 20
+          && data.skillsWanted is list && data.skillsWanted.size() <= 20
+          && data.subscriptionPlan in ['free', 'pro']
+          && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 600))
+          && (!('username' in data) || (data.username is string && data.username.size() >= 3 && data.username.size() <= 30 && data.username.matches('^[a-z0-9_]+$')))
+          && (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000))
+          && (!('portfolioUrl' in data) || (data.portfolioUrl is string && data.portfolioUrl.size() <= 300))
+          && (!('country' in data) || (data.country is string && data.country.size() <= 100))
+          && (!('autoTranslate' in data) || data.autoTranslate is bool)
+          && (!('balance' in data) || data.balance is number)
+          && (!('testimonials' in data) || (data.testimonials is list && data.testimonials.size() <= 20));
     }
 
-    // --- Trade Rules ---
-    match /trades/{tradeId} {
-      function isValidTrade(data) {
-        return data.senderId is string && data.receiverId is string
-            && data.skillOffered is string && data.skillOffered.size() <= 200
-            && data.skillWanted is string && data.skillWanted.size() <= 200
-            && data.status in ['pending', 'accepted', 'declined', 'completed']
-            && (!('senderReview' in data) || (data.senderReview is map && data.senderReview.rating is number && data.senderReview.comment is string))
-            && (!('receiverReview' in data) || (data.receiverReview is map && data.receiverReview.rating is number && data.receiverReview.comment is string));
+    function isValidTrade(data) {
+      return data.senderId is string && isValidId(data.senderId)
+          && data.receiverId is string && isValidId(data.receiverId)
+          && data.skillOffered is string && data.skillOffered.size() <= 200
+          && data.skillWanted is string && data.skillWanted.size() <= 200
+          && data.status in ['pending', 'accepted', 'declined', 'completed']
+          && (!('senderReview' in data) || (data.senderReview is map && data.senderReview.rating is number && data.senderReview.comment is string && data.senderReview.comment.size() <= 500))
+          && (!('receiverReview' in data) || (data.receiverReview is map && data.receiverReview.rating is number && data.receiverReview.comment is string && data.receiverReview.comment.size() <= 500));
+    }
+
+    // --- Rules Implementation ---
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isValidId(userId);
+      allow list: if true; 
+
+      allow create: if isSignedIn() && isOwner(userId)
+                    && isValidUser(incoming())
+                    && !('email' in incoming())
+                    && (incoming().createdAt == request.time || !('createdAt' in incoming()))
+                    && incoming().keys().hasAll(['displayName', 'skillsOffered', 'skillsWanted', 'subscriptionPlan'])
+                    && incoming().keys().size() <= 15;
+
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin())
+                    && isValidUser(incoming())
+                    && !('email' in incoming())
+                    && (!('createdAt' in incoming()) || incoming().createdAt == existing().createdAt)
+                    && (
+                      isAdmin() ||
+                      incoming().diff(existing()).affectedKeys().hasOnly([
+                        'displayName', 'photoURL', 'username', 'skillsOffered', 
+                        'skillsWanted', 'bio', 'portfolioUrl', 'country', 
+                        'autoTranslate', 'testimonials', 'balance'
+                      ])
+                    );
+
+      // Private Information (PII Isolation)
+      match /private/{docId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isOwner(userId) && docId == 'info'
+                    && (incoming().email == request.auth.token.email || !('email' in incoming()))
+                    && incoming().keys().hasOnly(['email', 'email_verified', 'updatedAt']);
       }
 
-      allow get: if isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId);
-      allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid);
+      // Transactions (Wallet History)
+      match /transactions/{transactionId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow create: if isVerified() && isOwner(userId)
+                      && incoming().amount > 0
+                      && incoming().type in ['credit', 'debit']
+                      && incoming().status == 'completed'
+                      && incoming().createdAt == request.time
+                      && incoming().keys().hasAll(['amount', 'type', 'method', 'status', 'createdAt']);
+      }
+    }
 
-      allow create: if isSignedIn() 
+    // Notifications (Master Gate)
+    match /users/{userId}/notifications/{notificationId} {
+      allow read: if isOwner(userId);
+      allow delete: if isOwner(userId);
+      allow create: if isSignedIn()
+                           && incoming().userId == userId
+                           && incoming().keys().hasAll(['userId', 'type', 'message', 'read', 'createdAt']);
+      allow update: if (isOwner(userId) || isAdmin()) 
+                           && incoming().userId == userId
+                           && incoming().keys().hasAll(['userId', 'type', 'message', 'read', 'createdAt']);
+    }
+
+    // Trades Collection
+    match /trades/{tradeId} {
+      allow get: if isSignedIn() && isValidId(tradeId) && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.receiverId || isAdmin());
+      allow list: if isSignedIn() && (resource.data.senderId == request.auth.uid || resource.data.receiverId == request.auth.uid || isAdmin());
+
+      allow create: if isVerified() && isValidId(tradeId)
                     && incoming().senderId == request.auth.uid
                     && isValidTrade(incoming())
                     && incoming().status == 'pending'
                     && incoming().createdAt == request.time
-                    && incoming().updatedAt == request.time;
+                    && incoming().updatedAt == request.time
+                    && exists(/databases/$(database)/documents/users/$(incoming().receiverId));
 
-      allow update: if isSignedIn() 
-                    && (request.auth.uid == existing().senderId || request.auth.uid == existing().receiverId)
+      allow update: if isVerified() && isValidId(tradeId)
+                    && (isOwner(existing().senderId) || isOwner(existing().receiverId) || isAdmin())
                     && isValidTrade(incoming())
                     && incoming().createdAt == existing().createdAt
                     && incoming().updatedAt == request.time
                     && (
+                      isAdmin() ||
                       // Action: Receiver responds
-                      (request.auth.uid == existing().receiverId && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
-                      // Action: Either marks as completed
+                      (isOwner(existing().receiverId) && existing().status == 'pending' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+                      // Action: Either completes
                       (incoming().status == 'completed' && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
-                      // Action: Sender reviews
-                      (request.auth.uid == existing().senderId && incoming().diff(existing()).affectedKeys().hasOnly(['senderReview', 'updatedAt'])) ||
-                      // Action: Receiver reviews
-                      (request.auth.uid == existing().receiverId && incoming().diff(existing()).affectedKeys().hasOnly(['receiverReview', 'updatedAt']))
+                      // Action: Reviewing
+                      (isOwner(existing().senderId) && incoming().diff(existing()).affectedKeys().hasOnly(['senderReview', 'updatedAt'])) ||
+                      (isOwner(existing().receiverId) && incoming().diff(existing()).affectedKeys().hasOnly(['receiverReview', 'updatedAt']))
                     );
+      
+      allow delete: if isAdmin();
     }
 
-    // --- Notifications ---
-    match /users/{userId}/notifications/{notificationId} {
-      allow read, write: if isOwner(userId);
-    }
-
-    // --- Post Rules ---
+    // Posts Collection
     match /posts/{postId} {
       function isValidPost(data) {
         return data.userId is string && data.userId == request.auth.uid
-            && data.userName is string && data.userName.size() > 0
+            && data.userName is string && data.userName.size() <= 100
             && data.content is string && data.content.size() > 0 && data.content.size() <= 2000
-            && (!('likes' in data) || (data.likes is list && data.likes.size() <= 1000));
+            && (!('likes' in data) || (data.likes is list && data.likes.size() <= 5000));
       }
 
-      allow read: if isSignedIn();
+      allow read: if true;
       
-      allow create: if isSignedIn()
+      allow create: if isVerified() && isValidId(postId)
                     && isValidPost(incoming())
                     && incoming().createdAt == request.time;
                     
-      allow update: if isSignedIn()
+      allow update: if isVerified() && isValidId(postId)
                     && (
-                      // Only allow liking/unliking or owner edit
-                      (isOwner(existing().userId) && isValidPost(incoming())) ||
+                      isAdmin() ||
+                      (isOwner(existing().userId) && isValidPost(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['content', 'userName', 'username', 'userPhoto'])) ||
                       (incoming().diff(existing()).affectedKeys().hasOnly(['likes']))
                     );
       
-      allow delete: if isOwner(existing().userId);
+      allow delete: if isOwner(existing().userId) || isAdmin();
     }
   }
 }

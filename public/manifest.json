@@ -1,0 +1,21 @@
+{
+  "name": "Barter - Global Skill Exchange",
+  "short_name": "Barter",
+  "description": "Global professional skill-barter platform without money.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=Barter",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "https://api.dicebear.com/7.x/shapes/svg?seed=Barter",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
