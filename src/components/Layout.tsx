@@ -89,12 +89,12 @@ export function Layout({ children }: LayoutProps) {
 
           <div className="pt-12 border-t border-slate-200 flex flex-col md:flex-row items-center justify-between gap-6">
             <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">
-              © {new Date().getFullYear()} REVERSE SKILL-BARTER COLLECTIVE.
+              © {new Date().getFullYear()} جميع الحقوق محفوظة لمالك المنصة.
             </p>
             <div className="flex items-center gap-6">
-               <span className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">Global Barter Ecosystem</span>
+               <span className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">الحقوق محفوظة 100%</span>
                <div className="w-px h-4 bg-slate-200" />
-               <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Built for the future of work</span>
+               <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">تم التصميم باحترافية</span>
             </div>
           </div>
         </div>

@@ -58,7 +58,7 @@ export function TranslatableContent({ content, className, autoTranslate = false 
               className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-blue-500 transition-colors"
             >
               {loading ? <RefreshCw size={10} className="animate-spin" /> : <Globe size={10} />}
-              ترجمة بالذكاء الاصطناعي
+              ترجمة احترافية فورية
             </button>
           )}
         </div>
