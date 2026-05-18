@@ -17,7 +17,7 @@ const resources = {
         "login": "تسجيل الدخول",
         "logout": "خروج النظام",
         "profile": "الملف الشخصي",
-        "home_title": "مقايضة",
+        "home_title": "منصتي الخاصة",
         "login_success": "تم تسجيل الدخول بنجاح",
         "login_error": "فشل تسجيل الدخول"
       },
@@ -54,13 +54,13 @@ const resources = {
         "history": "سجل المقايضات"
       },
       "footer": {
-        "description": "أكبر مجتمع مهني للمقايضة العكسية في العالم العربي. نهدف لتمكين المحترفين من تبادل القيمة الحقيقية بعيداً عن قيود العملات التقليدية.",
-        "platform": "المنصة",
-        "support": "الدعم والأمان"
+        "description": "منصة احترافية خاصة لتبادل المهارات والخدمات بصورة حصرية ومباشرة. نهدف لتمكين المحترفين من تبادل القيمة الحقيقية بكل سهولة.",
+        "platform": "النظام",
+        "support": "الدعم الفني"
       },
       "home": {
-        "heroTitle": "المقايضة للمحترفين",
-        "heroSubtitle": "تبادل مهاراتك مباشرة مع صفوة المحترفين. لا عمولات، لا وسطاء بالدولار، فقط القيمة مقابل القيمة.",
+        "heroTitle": "منصة المحترفين الخاصة",
+        "heroSubtitle": "تبادل مهاراتك مباشرة مع صفوة المختصين. لا عمولات، لا وسطاء، فقط القيمة الحقيقية مقابل القيمة.",
         "startExploring": "ابدأ الاستكشاف",
         "community": "المجتمع",
         "stats": {
@@ -160,7 +160,7 @@ const resources = {
         "login": "Sign In",
         "logout": "Sign Out",
         "profile": "Profile",
-        "home_title": "Barter",
+        "home_title": "My Platform",
         "login_success": "Login successful",
         "login_error": "Login failed"
       },
@@ -197,13 +197,13 @@ const resources = {
         "history": "Trade History"
       },
       "footer": {
-        "description": "The largest professional reverse-barter community in the world. We aim to empower professionals to exchange real value away from traditional currency constraints.",
-        "platform": "Platform",
-        "support": "Support & Security"
+        "description": "A private professional platform for exchanging skills and services exclusively and directly. We aim to empower professionals to exchange real value with ease.",
+        "platform": "System",
+        "support": "Technical Support"
       },
       "home": {
-        "heroTitle": "Barter for Professionals",
-        "heroSubtitle": "Exchange your skills directly with elite professionals. No commissions, no middlemen, just value for value.",
+        "heroTitle": "Private Professionals Platform",
+        "heroSubtitle": "Exchange your skills directly with top experts. No commissions, no middlemen, just real value for value.",
         "startExploring": "Start Exploring",
         "community": "Community",
         "stats": {

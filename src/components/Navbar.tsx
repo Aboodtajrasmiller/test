@@ -63,7 +63,7 @@ export function Navbar() {
           </div>
           <div className="hidden sm:flex flex-col">
             <span className="font-extrabold text-lg tracking-tight leading-none text-slate-900">{t('nav.home_title') || 'مقايضة'}</span>
-            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">Professional Exchange</span>
+            <span className="text-[10px] font-bold text-blue-600 uppercase tracking-widest mt-0.5">{i18n.language === 'ar' ? 'النظام المهني الخاص' : 'Private Pro System'}</span>
           </div>
         </Link>
 
